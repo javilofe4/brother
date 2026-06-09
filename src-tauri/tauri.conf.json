@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Personal Progress Game",
+  "version": "0.1.0",
+  "identifier": "com.personalprogressgame.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Personal Progress Game",
+        "width": 1024,
+        "height": 720
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' data: blob: filesystem: ws: http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

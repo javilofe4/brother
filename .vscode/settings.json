@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd c:\\\\Users\\\\javie\\\\Desktop\\\\brothers\\\\personal-progress-game ; npm install$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^npx tsc --noEmit ; npm run tauri info$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

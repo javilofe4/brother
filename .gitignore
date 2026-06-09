@@ -1,0 +1,41 @@
+# Node modules and build output
+node_modules/
+**/node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+.npm/
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+**/src-tauri/target/
+**/src-tauri/gen/
+
+# Local artifacts and database files
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+backups/
+local-data/
+
+# Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Temporary files
+*.local
