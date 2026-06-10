@@ -1,20 +1,34 @@
-# Estrategia de sincronización futura
+# Sync Strategy
 
-La sincronización futura debe basarse en:
+Sync is not implemented in Phase 1.
 
-- Eventos inmutables en formato JSON.
-- Identificadores únicos (`id`) para cada entidad.
-- Importación idempotente: procesar el mismo evento varias veces sin duplicar.
-- Soft deletes: marcar como eliminados en lugar de borrar datos.
-- Resolución simple de conflictos: preferir el valor más reciente o un estado de resolución manual.
+The design is local-first and event/snapshot oriented. Do not sync `app.db`,
+`*.sqlite`, or any raw SQLite file.
 
-## Qué NO hacer
-- No subir el archivo SQLite local (`app.db`, `*.sqlite`).
-- No guardar tokens en el frontend.
-- No usar `VITE_` para secretos.
-- No confiar en sincronizar solo un `SELECT *` sin eventos.
+## Future Sync Unit
 
-## Riesgos
-- Subir la base de datos entera expone datos privados y rompe la capacidad offline.
-- Los secretos en el frontend pueden filtrarse en repositorios o builds.
-- Los conflictos deben resolverse de manera predecible, no por última escritura sin verificación.
+Future sync should exchange JSON records for:
+
+- sessions
+- progress events
+- metric snapshots
+- achievement progress
+- XP ledger entries
+
+Progress events are immutable and are the safest replay unit. Snapshots can be
+recomputed, but syncing them can speed up startup and conflict inspection.
+
+## Rules
+
+- Use stable ids for all synced entities.
+- Make imports idempotent.
+- Never overwrite immutable progress events.
+- Resolve corrections by adding new events.
+- Keep secrets out of frontend and `VITE_` variables.
+
+## Pending
+
+- Export event bundle.
+- Import event bundle.
+- Conflict report UI.
+- GitHub or private remote transport.

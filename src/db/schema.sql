@@ -1,238 +1,170 @@
--- Personal Progress Game — SQLite Schema
--- Dates stored as ISO 8601 strings, IDs as text (UUID)
+-- Personal Progress Game Phase 1 schema
+-- Local-first storage. Future sync should exchange events/snapshots, not the app db file.
 
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
--- ─────────────────────────────────────────────
--- Users
--- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-  id          TEXT PRIMARY KEY,  -- 'javier' | 'rival'
-  name        TEXT NOT NULL,
-  avatar      TEXT NOT NULL,
-  color       TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-INSERT OR IGNORE INTO users VALUES
-  ('javier', 'Javier', '⚡', '#00e5ff', datetime('now')),
-  ('rival',  'Rival',  '🔥', '#7c3aed', datetime('now'));
-
--- ─────────────────────────────────────────────
--- Workouts
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS workouts (
-  id               TEXT PRIMARY KEY,
-  user_id          TEXT NOT NULL REFERENCES users(id),
-  type             TEXT NOT NULL,          -- WorkoutType
-  duration_minutes INTEGER NOT NULL,
-  distance_km      REAL,
-  weight_kg        REAL,
-  reps             INTEGER,
-  intensity        INTEGER NOT NULL CHECK(intensity BETWEEN 1 AND 10),
-  notes            TEXT,
-  date             TEXT NOT NULL,          -- YYYY-MM-DD
-  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at       TEXT                    -- soft delete
-);
-
-CREATE INDEX IF NOT EXISTS idx_workouts_user ON workouts(user_id, date);
-
--- ─────────────────────────────────────────────
--- Finance Entries
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS finance_entries (
   id         TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES users(id),
-  type       TEXT NOT NULL CHECK(type IN ('income','expense','saving')),
-  amount     REAL NOT NULL CHECK(amount > 0),
-  category   TEXT NOT NULL,
-  date       TEXT NOT NULL,
-  notes      TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_finance_user ON finance_entries(user_id, date);
-
--- ─────────────────────────────────────────────
--- Financial goals
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS financial_goals (
-  id            TEXT PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(id),
-  title         TEXT NOT NULL,
-  description   TEXT,
-  target_amount REAL NOT NULL CHECK(target_amount >= 0),
-  current_amount REAL NOT NULL CHECK(current_amount >= 0),
-  currency      TEXT NOT NULL DEFAULT 'EUR',
-  status        TEXT NOT NULL CHECK(status IN ('active','completed','paused')),
-  started_at    TEXT NOT NULL,
-  deadline_at   TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT,
-  deleted_at    TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_financial_goals_user ON financial_goals(user_id);
-
--- ─────────────────────────────────────────────
--- Emergency funds
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS emergency_funds (
-  id            TEXT PRIMARY KEY,
-  user_id       TEXT NOT NULL REFERENCES users(id),
-  current_amount REAL NOT NULL CHECK(current_amount >= 0),
-  target_amount REAL NOT NULL CHECK(target_amount >= 0),
-  saved_at      TEXT NOT NULL,
-  note          TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT,
-  deleted_at    TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_emergency_funds_user ON emergency_funds(user_id);
-
--- ─────────────────────────────────────────────
--- Investment opportunities
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS investment_opportunities (
-  id             TEXT PRIMARY KEY,
-  user_id        TEXT NOT NULL REFERENCES users(id),
-  name           TEXT NOT NULL,
-  type           TEXT NOT NULL,
-  amount         REAL NOT NULL CHECK(amount >= 0),
-  expected_return REAL,
-  timeframe_months INTEGER,
-  notes          TEXT,
-  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at     TEXT,
-  deleted_at     TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_investment_opportunities_user ON investment_opportunities(user_id);
-
--- ─────────────────────────────────────────────
--- Investor profiles
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS investor_profiles (
-  id               TEXT PRIMARY KEY,
-  user_id          TEXT NOT NULL REFERENCES users(id),
-  risk_tolerance   TEXT NOT NULL,
-  preferred_assets TEXT NOT NULL,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at       TEXT,
-  deleted_at       TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_investor_profiles_user ON investor_profiles(user_id);
-
--- ─────────────────────────────────────────────
--- Project finances
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS project_finances (
-  id          TEXT PRIMARY KEY,
-  user_id     TEXT NOT NULL REFERENCES users(id),
-  name        TEXT NOT NULL,
-  budget      REAL NOT NULL CHECK(budget >= 0),
-  spent       REAL NOT NULL CHECK(spent >= 0),
-  status      TEXT NOT NULL CHECK(status IN ('planning','active','completed')),
-  notes       TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT,
-  deleted_at  TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_project_finances_user ON project_finances(user_id);
-
--- ─────────────────────────────────────────────
--- Achievements
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS achievements (
-  id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL,
-  description TEXT NOT NULL,
-  type        TEXT NOT NULL,
-  score_reward INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT,
-  deleted_at  TEXT
-);
-
-CREATE TABLE IF NOT EXISTS user_achievements (
-  id             TEXT PRIMARY KEY,
-  achievement_id TEXT NOT NULL REFERENCES achievements(id),
-  user_id        TEXT NOT NULL REFERENCES users(id),
-  status         TEXT NOT NULL CHECK(status IN ('locked','unlocked')),
-  progress       REAL NOT NULL DEFAULT 0,
-  unlocked_at    TEXT,
-  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at     TEXT,
-  deleted_at     TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id);
-
--- ─────────────────────────────────────────────
--- Challenges
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS challenges (
-  id            TEXT PRIMARY KEY,
-  created_by    TEXT NOT NULL REFERENCES users(id),
-  target_user   TEXT NOT NULL REFERENCES users(id),
-  title         TEXT NOT NULL,
-  type          TEXT NOT NULL,
-  target_value  REAL NOT NULL,
-  current_value REAL NOT NULL DEFAULT 0,
-  unit          TEXT NOT NULL,
-  points        INTEGER NOT NULL,
-  start_date    TEXT NOT NULL,
-  end_date      TEXT NOT NULL,
-  status        TEXT NOT NULL DEFAULT 'proposed'
-                CHECK(status IN ('proposed','accepted','completed','failed')),
-  notes         TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  deleted_at    TEXT
-);
-
--- ─────────────────────────────────────────────
--- Score Events (audit trail of point changes)
--- ─────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS score_events (
-  id         TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES users(id),
-  points     INTEGER NOT NULL,
-  reason     TEXT NOT NULL,
-  entity_id  TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  avatar     TEXT NOT NULL,
+  color      TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- ─────────────────────────────────────────────
--- Sync Events (for future GitHub JSON sync)
--- ─────────────────────────────────────────────
+INSERT OR IGNORE INTO users (id, name, avatar, color, created_at) VALUES
+  ('javier', 'Javier', 'J', '#00e5ff', datetime('now')),
+  ('rival',  'Rival',  'R', '#f43f5e', datetime('now'));
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id                TEXT PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id),
+  template_id       TEXT NOT NULL,
+  occurred_at       TEXT NOT NULL,
+  duration_minutes  REAL,
+  intensity         INTEGER CHECK (intensity IS NULL OR intensity BETWEEN 1 AND 10),
+  distance_km       REAL,
+  amount_eur        REAL,
+  notes             TEXT,
+  tags              TEXT NOT NULL DEFAULT '[]',
+  fields            TEXT NOT NULL DEFAULT '{}',
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_date ON sessions(user_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_template ON sessions(template_id);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id          TEXT PRIMARY KEY,
+  label       TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS session_tags (
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  tag_id     TEXT NOT NULL REFERENCES tags(id),
+  PRIMARY KEY (session_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS progress_events (
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id),
+  session_id       TEXT NOT NULL REFERENCES sessions(id),
+  type             TEXT NOT NULL,
+  occurred_at      TEXT NOT NULL,
+  tags             TEXT NOT NULL DEFAULT '[]',
+  xp_from_activity INTEGER NOT NULL DEFAULT 0,
+  metadata         TEXT NOT NULL DEFAULT '{}',
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_progress_events_user_date ON progress_events(user_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_progress_events_session ON progress_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_progress_events_type ON progress_events(type);
+
+CREATE TABLE IF NOT EXISTS metric_definitions (
+  id           TEXT PRIMARY KEY,
+  label        TEXT NOT NULL,
+  aggregate    TEXT NOT NULL,
+  filter_json  TEXT NOT NULL DEFAULT '{}',
+  source_field TEXT
+);
+
+CREATE TABLE IF NOT EXISTS metric_snapshots (
+  metric_id     TEXT NOT NULL,
+  user_id       TEXT NOT NULL REFERENCES users(id),
+  value         REAL NOT NULL DEFAULT 0,
+  last_event_id TEXT REFERENCES progress_events(id),
+  computed_at   TEXT NOT NULL,
+  PRIMARY KEY (metric_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS achievement_series (
+  id                       TEXT PRIMARY KEY,
+  name                     TEXT NOT NULL,
+  description              TEXT NOT NULL,
+  category                 TEXT NOT NULL,
+  icon                     TEXT NOT NULL,
+  rarity                   TEXT NOT NULL,
+  depends_on_metric        TEXT NOT NULL,
+  origin                   TEXT NOT NULL DEFAULT 'system',
+  status                   TEXT NOT NULL DEFAULT 'active',
+  is_hidden                INTEGER NOT NULL DEFAULT 0,
+  created_at               TEXT,
+  created_by_user_id       TEXT REFERENCES users(id),
+  requires_mutual_approval INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS achievement_levels (
+  series_id    TEXT NOT NULL REFERENCES achievement_series(id) ON DELETE CASCADE,
+  level        INTEGER NOT NULL,
+  label        TEXT NOT NULL,
+  description  TEXT NOT NULL,
+  threshold    REAL NOT NULL,
+  xp_reward    INTEGER NOT NULL,
+  rarity       TEXT NOT NULL,
+  reward_type  TEXT NOT NULL,
+  PRIMARY KEY (series_id, level)
+);
+
+CREATE TABLE IF NOT EXISTS achievement_progress (
+  series_id       TEXT NOT NULL REFERENCES achievement_series(id),
+  user_id         TEXT NOT NULL REFERENCES users(id),
+  current_value   REAL NOT NULL DEFAULT 0,
+  current_level   INTEGER NOT NULL DEFAULT 0,
+  total_xp_earned INTEGER NOT NULL DEFAULT 0,
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (series_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS achievement_unlocked_levels (
+  series_id   TEXT NOT NULL,
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  level       INTEGER NOT NULL,
+  unlocked_at TEXT NOT NULL,
+  event_id    TEXT NOT NULL,
+  PRIMARY KEY (series_id, user_id, level),
+  FOREIGN KEY (series_id, level) REFERENCES achievement_levels(series_id, level)
+);
+
+CREATE TABLE IF NOT EXISTS xp_ledger (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id),
+  amount       INTEGER NOT NULL,
+  source       TEXT NOT NULL,
+  reference_id TEXT NOT NULL,
+  occurred_at  TEXT NOT NULL,
+  description  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_xp_ledger_user_date ON xp_ledger(user_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_xp_ledger_reference ON xp_ledger(reference_id);
+
+-- Future governance TODOs:
+-- propose custom achievement
+-- approve custom achievement
+-- archive achievement with mutual consent
+
 CREATE TABLE IF NOT EXISTS sync_events (
   id         TEXT PRIMARY KEY,
-  type       TEXT NOT NULL,       -- SyncEventType
+  type       TEXT NOT NULL,
   entity_id  TEXT NOT NULL,
   created_by TEXT NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  payload    TEXT NOT NULL,       -- JSON string
-  synced     INTEGER NOT NULL DEFAULT 0  -- boolean 0|1
+  payload    TEXT NOT NULL,
+  synced     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_sync_pending ON sync_events(synced, created_at);
 
--- ─────────────────────────────────────────────
--- App Settings
--- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS app_settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT OR IGNORE INTO app_settings VALUES
+INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES
   ('active_user_id', 'javier', datetime('now')),
-  ('last_sync_at',   '',       datetime('now')),
-  ('sync_enabled',   '0',      datetime('now'));
+  ('schema_version', '3', datetime('now')),
+  ('sync_enabled', '0', datetime('now'));

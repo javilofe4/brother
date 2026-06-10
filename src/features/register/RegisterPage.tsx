@@ -1,253 +1,393 @@
 import { useMemo, useState } from "react";
-import {
-  Dumbbell,
-  Wallet,
-  Flag,
-  Sparkles,
-  CheckCircle,
-  XCircle,
-  PlusCircle,
-} from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { CheckCircle2, Zap } from "lucide-react";
 import { useAppStore } from "@/app/store";
-import { buildProgressEvent, getXpForProgressEvent, PROGRESS_EVENT_LABELS } from "@/domain/progress/progress.service";
-import type { ProgressEventType } from "@/domain/progress/progress.types";
-import { Button, Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Select, Textarea, Badge } from "@/shared/components/ui";
-import { PageHeader } from "@/shared/components/PageHeader";
-import { PROGRESS_XP_RULES } from "@/shared/config/scoringConfig";
+import { SESSION_TEMPLATES } from "@/shared/config/sessionTemplatesConfig";
+import type { SessionTemplate } from "@/domain/sessions/session.types";
+import { TAG_BY_ID } from "@/domain/tags/tagCatalog";
+import type { TagId } from "@/domain/tags/tag.types";
+import { ACHIEVEMENT_CATALOG } from "@/domain/achievements/achievementCatalog";
+import type { GamePipelineResult } from "@/domain/game/gamePipeline.service";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+  Input,
+  Label,
+  Select,
+  Textarea,
+  Badge,
+  cn,
+} from "@/shared/components/ui";
 
-const formTemplates: Record<ProgressEventType, { icon: React.ElementType; label: string }> = {
-  workout_logged: { icon: Dumbbell, label: "Entrenamiento" },
-  finance_logged: { icon: Wallet, label: "Finanzas" },
-  challenge_created: { icon: Flag, label: "Crear reto" },
-  challenge_completed: { icon: CheckCircle, label: "Completar reto" },
-  challenge_failed: { icon: XCircle, label: "Reto fallido" },
-  manual_action: { icon: Sparkles, label: "Acción manual" },
+const TEMPLATE_VISUALS: Record<SessionTemplate["id"], { icon: string; color: string }> = {
+  combat_session: { icon: "🥊", color: "#f43f5e" },
+  strength_session: { icon: "🏋️", color: "#7c3aed" },
+  swimming_session: { icon: "🏊", color: "#00e5ff" },
+  running_session: { icon: "🏃", color: "#10b981" },
+  walking_session: { icon: "🚶", color: "#22c55e" },
+  route_session: { icon: "🗺️", color: "#f59e0b" },
+  finance_saving: { icon: "💰", color: "#10b981" },
+  finance_expense: { icon: "💸", color: "#f43f5e" },
+  finance_income: { icon: "💵", color: "#00e5ff" },
+  challenge_result: { icon: "🏆", color: "#f59e0b" },
+  manual_action: { icon: "✍️", color: "#8888aa" },
 };
 
-const financeCategories = [
-  "salary",
-  "profit",
-  "debt",
-  "fixed",
-  "variable",
-  "tax",
-  "fun",
-  "investment",
-  "learning",
-  "clothes",
-  "other",
-] as const;
+function TemplateGrid({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (id: SessionTemplate["id"]) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      {SESSION_TEMPLATES.map((template) => {
+        const visual = TEMPLATE_VISUALS[template.id];
+        return (
+          <button
+            key={template.id}
+            onClick={() => onSelect(template.id)}
+            className={cn(
+              "flex min-h-24 flex-col items-start justify-between rounded-lg border p-3 text-left transition-all",
+              selected === template.id
+                ? "scale-[0.98] bg-bg-elevated"
+                : "border-bg-border bg-bg-card hover:border-bg-border/80"
+            )}
+            style={selected === template.id ? { borderColor: visual.color } : {}}
+          >
+            <span className="text-2xl">{visual.icon}</span>
+            <span className="text-sm font-semibold text-text-primary">{template.title}</span>
+            <span className="line-clamp-2 text-xs text-text-muted">{template.description}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-export function RegisterPage() {
-  const activeUserId = useAppStore((s) => s.activeUserId);
-  const addProgressEvent = useAppStore((s) => s.addProgressEvent);
-  const updateScore = useAppStore((s) => s.updateScore);
-  const [activeTab, setActiveTab] = useState<ProgressEventType>("workout_logged");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [intensity, setIntensity] = useState(7);
-  const [amount, setAmount] = useState(0);
-  const [category, setCategory] = useState<typeof financeCategories[number]>("salary");
-  const [manualXp, setManualXp] = useState(15);
-  const [status, setStatus] = useState<"created" | "completed" | "failed">("created");
-  const [feedback, setFeedback] = useState("");
+function parseFieldValue(value: string): unknown {
+  if (value === "") return undefined;
+  const maybeNumber = Number(value);
+  return Number.isFinite(maybeNumber) && value.trim() !== "" ? maybeNumber : value;
+}
 
-  const xp = useMemo(
-    () => getXpForProgressEvent(activeTab, {
-      intensity,
-      manualXp,
-    }),
-    [activeTab, intensity, manualXp]
+function SessionForm({
+  template,
+  onSubmit,
+  onCancel,
+}: {
+  template: SessionTemplate;
+  onSubmit: (values: Record<string, string>, selectedTags: TagId[]) => void;
+  onCancel: () => void;
+}) {
+  const visual = TEMPLATE_VISUALS[template.id];
+  const [values, setValues] = useState<Record<string, string>>({
+    date: new Date().toISOString().slice(0, 10),
+    intensity: template.fields.some((field) => field.key === "intensity") ? "7" : "",
+  });
+  const [selectedTags, setSelectedTags] = useState<TagId[]>([]);
+
+  const relatedSeries = useMemo(
+    () => ACHIEVEMENT_CATALOG.filter((series) => series.relatedTemplateId === template.id),
+    [template.id]
   );
 
-  const submitLabel = activeTab === "manual_action" ? "Registrar acción" : "Registrar progreso";
+  const set = (key: string, value: string) =>
+    setValues((previous) => ({ ...previous, [key]: value }));
 
   const handleSubmit = () => {
-    if (!title.trim() || !description.trim()) {
-      setFeedback("Completa el título y la descripción antes de guardar.");
-      return;
-    }
-
-    const metadata: Record<string, unknown> = {
-      category,
-      intensity,
-      amount,
-      status,
-    };
-
-    const event = buildProgressEvent({
-      id: `pe-${Date.now()}`,
-      userId: activeUserId,
-      type: activeTab,
-      title: title.trim(),
-      description: description.trim(),
-      xp,
-      metadata,
-    });
-
-    addProgressEvent(event);
-    updateScore(activeUserId, xp);
-    setFeedback(`Registrado: ${PROGRESS_EVENT_LABELS[activeTab]} (+${xp} XP)`);
-    setTitle("");
-    setDescription("");
+    const missing = template.fields.some(
+      (field) => field.required && !values[field.key]
+    );
+    if (missing) return;
+    onSubmit(values, selectedTags);
   };
 
   return (
-    <div className="p-6 animate-fade-in">
-      <PageHeader
-        title="Registrar progreso"
-        subtitle="Registra acciones simples y gana XP para subir de nivel."
-      />
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle>Tipo de registro</CardTitle>
-              <p className="text-sm text-text-muted">Selecciona una fuente de progreso.</p>
-            </div>
-            <Badge variant="default">XP base {xp}</Badge>
+    <Card className="animate-slide-in" style={{ borderColor: `${visual.color}55` }}>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-2xl"
+            style={{ background: `${visual.color}20` }}
+          >
+            {visual.icon}
           </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue={activeTab} value={activeTab} onValueChange={(value) => setActiveTab(value as ProgressEventType)}>
-            <TabsList>
-              {Object.entries(formTemplates).map(([key, item]) => (
-                <TabsTrigger key={key} value={key}>
-                  <item.icon className="h-4 w-4" /> {item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div>
+            <CardTitle style={{ color: visual.color }}>{template.title}</CardTitle>
+            {relatedSeries.length > 0 && (
+              <p className="mt-0.5 text-[10px] text-text-muted">
+                Actualiza: {relatedSeries.slice(0, 4).map((series) => series.name).join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label>Fecha</Label>
+            <Input
+              type="date"
+              value={values.date}
+              onChange={(event) => set("date", event.target.value)}
+            />
+          </div>
 
-            {Object.entries(formTemplates).map(([key, item]) => (
-              <TabsContent key={key} value={key} className="mt-4">
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Título</Label>
-                      <Input
-                        value={title}
-                        onChange={(event) => setTitle(event.target.value)}
-                        placeholder={item.label}
-                      />
-                    </div>
-                    <div>
-                      <Label>Descripción</Label>
-                      <Textarea
-                        rows={4}
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        placeholder="¿Qué hiciste y por qué cuenta como progreso?"
-                      />
-                    </div>
+          {template.fields.map((field) => (
+            <div key={field.key} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
+              <Label>
+                {field.label}
+                {field.required && <span className="ml-1 text-accent-rose">*</span>}
+              </Label>
 
-                    {key === "workout_logged" && (
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div>
-                          <Label>Intensidad</Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            max={10}
-                            value={intensity}
-                            onChange={(event) => setIntensity(Number(event.target.value))}
-                          />
-                        </div>
-                        <div>
-                          <Label>Duración (min)</Label>
-                          <Input
-                            type="number"
-                            value={amount}
-                            onChange={(event) => setAmount(Number(event.target.value))}
-                            placeholder="30"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {key === "finance_logged" && (
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div>
-                          <Label>Categoría</Label>
-                          <Select value={category} onChange={(event) => setCategory(event.target.value as typeof financeCategories[number])}>
-                            {financeCategories.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Importe</Label>
-                          <Input
-                            type="number"
-                            value={amount}
-                            onChange={(event) => setAmount(Number(event.target.value))}
-                            placeholder="100"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {key.startsWith("challenge") && (
-                      <div>
-                        <Label>Resultado</Label>
-                        <Select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
-                          <option value="created">Creado</option>
-                          <option value="completed">Completado</option>
-                          <option value="failed">Fallado</option>
-                        </Select>
-                      </div>
-                    )}
-
-                    {key === "manual_action" && (
-                      <div>
-                        <Label>XP deseado</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={PROGRESS_XP_RULES.manualActionMax}
-                          value={manualXp}
-                          onChange={(event) => setManualXp(Number(event.target.value))}
-                        />
-                        <p className="text-xs text-text-muted mt-1">Máximo {PROGRESS_XP_RULES.manualActionMax} XP.</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    <Card className="bg-bg-elevated border border-bg-border p-4">
-                      <p className="text-xs uppercase tracking-widest text-text-muted mb-2">Resumen</p>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm text-text-secondary">
-                          <span>Tipo</span>
-                          <span>{item.label}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-text-secondary">
-                          <span>XP estimado</span>
-                          <span className="font-medium">{xp}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-text-secondary">
-                          <span>Regla</span>
-                          <span>{PROGRESS_EVENT_LABELS[activeTab]}</span>
-                        </div>
-                      </div>
-                    </Card>
-
-                    <Button className="w-full" onClick={handleSubmit}>
-                      <PlusCircle className="h-4 w-4" />
-                      {submitLabel}
-                    </Button>
-
-                    {feedback && (
-                      <div className="rounded-xl border border-accent-cyan/20 bg-accent-cyan/5 p-3 text-sm text-text-primary">
-                        {feedback}
-                      </div>
-                    )}
+              {field.type === "slider" && (
+                <div>
+                  <input
+                    type="range"
+                    min={field.min ?? 1}
+                    max={field.max ?? 10}
+                    value={values[field.key] ?? "7"}
+                    onChange={(event) => set(field.key, event.target.value)}
+                    className="mt-2 w-full"
+                    style={{ accentColor: visual.color }}
+                  />
+                  <div className="mt-1 flex justify-between text-xs text-text-muted">
+                    <span>1</span>
+                    <span className="font-mono font-bold" style={{ color: visual.color }}>
+                      {values[field.key] ?? "7"}/{field.max ?? 10}
+                    </span>
+                    <span>{field.max ?? 10}</span>
                   </div>
                 </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
+              )}
+
+              {field.type === "number" && (
+                <Input
+                  type="number"
+                  min={field.min}
+                  max={field.max}
+                  placeholder={field.placeholder}
+                  value={values[field.key] ?? ""}
+                  onChange={(event) => set(field.key, event.target.value)}
+                />
+              )}
+
+              {field.type === "text" && (
+                <Input
+                  placeholder={field.placeholder}
+                  value={values[field.key] ?? ""}
+                  onChange={(event) => set(field.key, event.target.value)}
+                />
+              )}
+
+              {field.type === "select" && (
+                <Select
+                  value={values[field.key] ?? ""}
+                  onChange={(event) => set(field.key, event.target.value)}
+                >
+                  <option value="">Selecciona...</option>
+                  {field.options?.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+
+              {field.type === "textarea" && (
+                <Textarea
+                  rows={2}
+                  placeholder={field.placeholder}
+                  value={values[field.key] ?? ""}
+                  onChange={(event) => set(field.key, event.target.value)}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {template.allowedTags.length > 0 && (
+          <div className="mb-4">
+            <Label>Tags permitidos</Label>
+            <div className="flex flex-wrap gap-2">
+              {template.allowedTags.map((tagId) => {
+                const active = selectedTags.includes(tagId);
+                const tag = TAG_BY_ID[tagId];
+                return (
+                  <button
+                    key={tagId}
+                    onClick={() =>
+                      setSelectedTags((previous) =>
+                        active
+                          ? previous.filter((item) => item !== tagId)
+                          : [...previous, tagId]
+                      )
+                    }
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-xs transition-all",
+                      active
+                        ? "border-accent-cyan bg-accent-cyan/10 text-accent-cyan"
+                        : "border-bg-border text-text-secondary hover:text-text-primary"
+                    )}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={handleSubmit} className="flex-1" style={{ background: visual.color }}>
+            <Zap className="h-4 w-4" />
+            Registrar sesion
+          </Button>
+          <Button variant="secondary" onClick={onCancel}>
+            Cancelar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SuccessCard({
+  result,
+  onAnother,
+  onDone,
+}: {
+  result: GamePipelineResult;
+  onAnother: () => void;
+  onDone: () => void;
+}) {
+  const template = SESSION_TEMPLATES.find((item) => item.id === result.session.templateId);
+  const visual = template ? TEMPLATE_VISUALS[template.id] : TEMPLATE_VISUALS.manual_action;
+
+  return (
+    <Card className="animate-fade-in py-10 text-center" style={{ borderColor: `${visual.color}55` }}>
+      <CardContent>
+        <div className="mb-3 text-5xl">{visual.icon}</div>
+        <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-accent-emerald" />
+        <h2 className="mb-1 font-display text-2xl text-text-primary">Sesion registrada</h2>
+        <p className="mb-3 font-display text-4xl" style={{ color: visual.color }}>
+          +{result.summary.totalXpAdded} XP
+        </p>
+
+        <div className="mx-auto mb-4 max-w-sm space-y-2 text-left">
+          <div className="rounded-lg border border-bg-border bg-bg-elevated px-4 py-2 text-sm text-text-secondary">
+            +{result.summary.activityXp} XP por actividad
+          </div>
+          {result.unlocks.map((unlock) => (
+            <div
+              key={`${unlock.series.id}-${unlock.level.level}`}
+              className="rounded-lg border border-accent-amber/30 bg-accent-amber/10 px-4 py-2"
+            >
+              <p className="text-sm font-medium text-accent-amber">Logro desbloqueado</p>
+              <p className="text-xs text-text-secondary">
+                {unlock.series.name} - {unlock.level.label} (+{unlock.level.xpReward} XP)
+              </p>
+            </div>
+          ))}
+          {result.unlocks.length === 0 && (
+            <Badge variant="muted">Metricas actualizadas sin nuevos desbloqueos</Badge>
+          )}
+        </div>
+
+        <div className="mt-4 flex justify-center gap-3">
+          <Button onClick={onAnother} variant="secondary">
+            Registrar otra
+          </Button>
+          <Button onClick={onDone}>Ir al Dashboard</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function RegisterPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const templateFromUrl = searchParams.get("template");
+  const initialTemplate = SESSION_TEMPLATES.some((template) => template.id === templateFromUrl)
+    ? templateFromUrl
+    : null;
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
+  const [result, setResult] = useState<GamePipelineResult | null>(null);
+  const activeUserId = useAppStore((state) => state.activeUserId);
+  const registerSession = useAppStore((state) => state.registerSession);
+
+  const template = selectedTemplateId
+    ? SESSION_TEMPLATES.find((item) => item.id === selectedTemplateId)
+    : null;
+
+  const handleSubmit = (values: Record<string, string>, selectedTags: TagId[]) => {
+    if (!template) return;
+    const fields = Object.fromEntries(
+      Object.entries(values)
+        .filter(([key]) => key !== "date")
+        .map(([key, value]) => [key, parseFieldValue(value)])
+        .filter(([, value]) => value !== undefined)
+    );
+    const pipelineResult = registerSession({
+      userId: activeUserId,
+      templateId: template.id,
+      occurredAt: values.date ? new Date(`${values.date}T12:00:00`).toISOString() : undefined,
+      tags: selectedTags,
+      fields,
+    });
+    setResult(pipelineResult);
+  };
+
+  if (result) {
+    return (
+      <div className="max-w-lg p-6">
+        <SuccessCard
+          result={result}
+          onAnother={() => {
+            setResult(null);
+            setSelectedTemplateId(null);
+          }}
+          onDone={() => navigate("/")}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-6 animate-fade-in">
+      <div className="mb-6">
+        <p className="mb-1 text-xs uppercase tracking-widest text-text-muted">Registrar</p>
+        <h1 className="font-display text-4xl tracking-wide text-text-primary">Nueva sesion</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          Cada registro crea una Session, un ProgressEvent, snapshots, logros y XP.
+        </p>
+      </div>
+
+      <div className="max-w-3xl">
+        <h2 className="mb-3 text-xs uppercase tracking-widest text-text-muted">
+          Tipo de sesion
+        </h2>
+        <TemplateGrid
+          selected={selectedTemplateId}
+          onSelect={(id) => setSelectedTemplateId(id)}
+        />
+
+        {template && (
+          <div className="mt-5">
+            <SessionForm
+              template={template}
+              onSubmit={handleSubmit}
+              onCancel={() => setSelectedTemplateId(null)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

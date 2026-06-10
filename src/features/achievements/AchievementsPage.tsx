@@ -1,152 +1,163 @@
-import { useMemo, useState } from "react";
-import { ShieldCheck, Lock, Star, Sparkles, Filter } from "lucide-react";
-import { useAchievements } from "./hooks/useAchievements";
-import { PageHeader } from "@/shared/components/PageHeader";
-import { AchievementCard } from "./components/AchievementCard";
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from "@/shared/components/ui";
-import { AchievementCategoryLabels, ACHIEVEMENT_CATEGORIES } from "@/shared/config/achievementConfig";
-import type { AchievementCategory } from "@/shared/config/achievementConfig";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAppStore } from "@/app/store";
+import { ACHIEVEMENT_CATALOG } from "@/domain/achievements/achievementCatalog";
+import {
+  RARITY_COLORS,
+  RARITY_LABELS,
+  getSeriesCurrentLevel,
+  getSeriesNextLevel,
+  getSeriesProgressPercent,
+} from "@/domain/achievements/achievement.types";
+import {
+  CATEGORY_LABELS,
+  type AchievementCategory,
+} from "@/domain/progress/progressEvent.types";
+import { Card, CardContent, Badge, Progress, cn } from "@/shared/components/ui";
+
+const FILTER_CATEGORIES: AchievementCategory[] = [
+  "all",
+  "combat",
+  "strength",
+  "endurance",
+  "finance",
+  "challenges",
+  "constancy",
+  "conditions",
+];
+
+const CATEGORY_ICONS: Record<AchievementCategory, string> = {
+  all: "🎮",
+  combat: "🥊",
+  strength: "🏋️",
+  endurance: "🏃",
+  finance: "💰",
+  challenges: "⚔️",
+  constancy: "📅",
+  conditions: "🌦️",
+};
 
 export function AchievementsPage() {
-  const { unlocked, locked, recentUnlocked, total, completed, unlockedDetails, lockedDetails } = useAchievements();
-  const [selectedCategory, setSelectedCategory] = useState<AchievementCategory | "all">("all");
+  const [filter, setFilter] = useState<AchievementCategory>("all");
+  const navigate = useNavigate();
+  const activeUserId = useAppStore((state) => state.activeUserId);
+  const allProgress = useAppStore((state) => state.getUserAchievementProgress(activeUserId));
 
-  const categoryOptions = useMemo(
-    () => ["all", ...ACHIEVEMENT_CATEGORIES] as const,
-    []
+  const filtered = ACHIEVEMENT_CATALOG.filter(
+    (series) => filter === "all" || series.category === filter
   );
-
-  const visibleUnlocked = useMemo(
-    () =>
-      selectedCategory === "all"
-        ? unlockedDetails
-        : unlockedDetails.filter(({ achievement }) => achievement.category === selectedCategory),
-    [selectedCategory, unlockedDetails]
-  );
-
-  const visibleLocked = useMemo(
-    () =>
-      selectedCategory === "all"
-        ? lockedDetails
-        : lockedDetails.filter(({ achievement }) => achievement.category === selectedCategory),
-    [selectedCategory, lockedDetails]
-  );
+  const unlockedSeries = allProgress.filter((progress) => progress.currentLevel > 0).length;
+  const maxedSeries = allProgress.filter((progress) => {
+    const series = ACHIEVEMENT_CATALOG.find((item) => item.id === progress.seriesId);
+    return Boolean(series && progress.currentLevel >= series.levels.length);
+  }).length;
 
   return (
-    <div className="p-6 animate-fade-in">
-      <PageHeader
-        title="Logros"
-        subtitle="Colecciona XP, desbloquea recompensas y avanza en tu duelo."
-      />
-
-      <div className="grid gap-3 lg:grid-cols-3 mb-6">
-        <Card glow="cyan">
-          <CardContent>
-            <div className="flex items-center gap-3 mb-3">
-              <ShieldCheck className="h-5 w-5 text-accent-cyan" />
-              <CardTitle>Desbloqueados</CardTitle>
-            </div>
-            <p className="text-2xl font-display text-text-primary">{completed}/{total}</p>
-            <p className="text-sm text-text-muted mt-1">Logros desbloqueados</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <div className="flex items-center gap-3 mb-3">
-              <Star className="h-5 w-5 text-accent-amber" />
-              <CardTitle>Últimos</CardTitle>
-            </div>
-            <p className="text-2xl font-display text-text-primary">{recentUnlocked.length}</p>
-            <p className="text-sm text-text-muted mt-1">Recientes desbloqueos</p>
-          </CardContent>
-        </Card>
-
-        <Card glow="emerald">
-          <CardContent>
-            <div className="flex items-center gap-3 mb-3">
-              <Sparkles className="h-5 w-5 text-accent-emerald" />
-              <CardTitle>Progreso</CardTitle>
-            </div>
-            <p className="text-2xl font-display text-text-primary">{locked.length}</p>
-            <p className="text-sm text-text-muted mt-1">Logros en progreso</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-text-muted">Filtro</p>
-          <h2 className="text-lg font-semibold text-text-primary">Explorar por categoría</h2>
+    <div className="h-full overflow-y-auto">
+      <div className="p-6 animate-fade-in">
+        <div className="mb-6">
+          <p className="mb-1 text-xs uppercase tracking-widest text-text-muted">Coleccion</p>
+          <h1 className="font-display text-4xl tracking-wide text-text-primary">Logros</h1>
+          <div className="mt-2 flex items-center gap-4">
+            <span className="text-sm text-text-secondary">
+              <span className="font-mono text-accent-cyan">{unlockedSeries}</span>/{ACHIEVEMENT_CATALOG.length} series
+            </span>
+            <span className="text-sm text-text-secondary">
+              <span className="font-mono text-accent-amber">{maxedSeries}</span> completadas
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {categoryOptions.map((category) => (
-            <Button
+
+        <div className="mb-6 flex flex-wrap gap-1">
+          {FILTER_CATEGORIES.map((category) => (
+            <button
               key={category}
-              variant={category === selectedCategory ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setSelectedCategory(category)}
+              onClick={() => setFilter(category)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                filter === category
+                  ? "bg-accent-cyan text-bg-base"
+                  : "border border-bg-border bg-bg-card text-text-secondary hover:text-text-primary"
+              )}
             >
-              {category === "all" ? "Todo" : AchievementCategoryLabels[category]}
-            </Button>
+              <span>{CATEGORY_ICONS[category]}</span>
+              <span>{CATEGORY_LABELS[category]}</span>
+            </button>
           ))}
         </div>
-      </div>
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-text-muted">Desbloqueados</p>
-              <h2 className="text-lg font-semibold text-text-primary">Tu colección</h2>
-            </div>
-            <Badge variant="default">{visibleUnlocked.length} / {completed}</Badge>
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map((series) => {
+            const progress = allProgress.find((item) => item.seriesId === series.id);
+            const currentLevelNumber = progress?.currentLevel ?? 0;
+            const currentLevel = getSeriesCurrentLevel(series, progress);
+            const nextLevel = getSeriesNextLevel(series, progress);
+            const progressPercent = getSeriesProgressPercent(series, progress);
+            const isMaxed = !nextLevel;
+            const rarityColor = RARITY_COLORS[nextLevel?.rarity ?? currentLevel?.rarity ?? series.rarity];
 
-          <div className="grid gap-3">
-            {visibleUnlocked.length === 0 ? (
-              <Card className="text-center py-10">
-                <Lock className="h-10 w-10 text-text-muted mx-auto mb-3" />
-                <p className="text-text-muted text-sm">Aún no has desbloqueado logros en esta categoría.</p>
+            return (
+              <Card
+                key={series.id}
+                className="cursor-pointer hover:border-accent-cyan/50"
+                onClick={() => navigate(`/achievements/${series.id}`)}
+                style={currentLevelNumber > 0 ? { borderColor: `${rarityColor}55` } : {}}
+              >
+                <CardContent>
+                  <div className="mb-3 flex items-start gap-3">
+                    <div
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-2xl"
+                      style={{ background: `${rarityColor}18` }}
+                    >
+                      {series.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-text-primary">{series.name}</p>
+                      <p className="text-xs text-text-muted">{CATEGORY_LABELS[series.category]}</p>
+                    </div>
+                    <Badge variant={series.status === "active" ? "emerald" : "muted"}>
+                      {series.status}
+                    </Badge>
+                  </div>
+
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-xs text-text-secondary">
+                      Nivel {currentLevelNumber}/{series.levels.length}
+                    </span>
+                    <span className="text-xs" style={{ color: rarityColor }}>
+                      {currentLevel?.label ?? "Sin desbloquear"}
+                    </span>
+                  </div>
+
+                  {!isMaxed && nextLevel ? (
+                    <>
+                      <div className="mb-1 flex justify-between text-[10px] text-text-muted">
+                        <span>{progress?.currentValue ?? 0} / {nextLevel.threshold}</span>
+                        <span>{Math.round(progressPercent)}%</span>
+                      </div>
+                      <Progress value={progressPercent} color={rarityColor} />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="muted">{nextLevel.label}</Badge>
+                        <Badge style={{ background: `${rarityColor}18`, color: rarityColor }}>
+                          {RARITY_LABELS[nextLevel.rarity]}
+                        </Badge>
+                        <Badge variant="amber">+{nextLevel.xpReward} XP</Badge>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-accent-amber/30 bg-accent-amber/10 px-3 py-2 text-sm text-accent-amber">
+                      Trofeo completado
+                    </div>
+                  )}
+
+                  <p className="mt-3 text-[10px] text-text-muted">
+                    Metrica: {series.dependsOnMetric}
+                  </p>
+                </CardContent>
               </Card>
-            ) : (
-              visibleUnlocked.map(({ achievement, userAchievement }) => (
-                <AchievementCard
-                  key={achievement.id}
-                  achievement={achievement}
-                  userAchievement={userAchievement}
-                />
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-text-muted">Bloqueados</p>
-              <h2 className="text-lg font-semibold text-text-primary">Próximos</h2>
-            </div>
-            <Badge variant="muted">{visibleLocked.length}</Badge>
-          </div>
-
-          <div className="grid gap-3">
-            {visibleLocked.length === 0 ? (
-              <Card className="text-center py-10">
-                <Lock className="h-10 w-10 text-text-muted mx-auto mb-3" />
-                <p className="text-text-muted text-sm">No hay logros bloqueados en esta categoría.</p>
-              </Card>
-            ) : (
-              visibleLocked.map(({ achievement, userAchievement }) => (
-                <AchievementCard
-                  key={achievement.id}
-                  achievement={achievement}
-                  userAchievement={userAchievement}
-                />
-              ))
-            )}
-          </div>
-        </section>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

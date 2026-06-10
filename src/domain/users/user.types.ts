@@ -3,21 +3,25 @@ export type UserId = "javier" | "rival";
 export interface User {
   id: UserId;
   name: string;
-  avatar: string; // emoji or initials
-  color: string; // accent color hex
+  avatar: string;
+  color: string;
 }
 
 export const USERS: Record<UserId, User> = {
   javier: {
     id: "javier",
     name: "Javier",
-    avatar: "⚡",
+    avatar: "J",
     color: "#00e5ff",
   },
   rival: {
     id: "rival",
     name: "Rival",
-    avatar: "🔥",
-    color: "#7c3aed",
+    avatar: "R",
+    color: "#f43f5e",
   },
 };
+
+export function normalizeUserId(value: unknown): UserId {
+  return value === "rival" || value === "hermano" ? "rival" : "javier";
+}
