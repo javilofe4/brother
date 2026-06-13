@@ -39,3 +39,8 @@ Thumbs.db
 
 # Temporary files
 *.local
+
+# Personal data exports — never commit these
+exports/
+*.ppg-export.json
+user-data/
