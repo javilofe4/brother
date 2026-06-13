@@ -5,6 +5,8 @@ export type XpLedgerSource =
   | "achievement_unlock"
   | "streak_bonus"
   | "challenge_win"
+  | "challenge_completed"
+  | "monthly_mission"
   | "manual_adjustment";
 
 export interface XpLedgerEntry {

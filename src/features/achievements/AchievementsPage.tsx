@@ -2,30 +2,16 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "@/app/store";
 import { ACHIEVEMENT_CATALOG } from "@/domain/achievements/achievementCatalog";
-import {
-  RARITY_COLORS,
-  RARITY_LABELS,
-  getSeriesCurrentLevel,
-  getSeriesNextLevel,
-  getSeriesProgressPercent,
-} from "@/domain/achievements/achievement.types";
-import {
-  CATEGORY_LABELS,
-  type AchievementCategory,
-} from "@/domain/progress/progressEvent.types";
-import { Card, CardContent, Badge, Progress, cn } from "@/shared/components/ui";
+import { RARITY_COLORS } from "@/domain/achievements/achievement.types";
+import { getSeriesProgressPercent, getSeriesNextLevel, getSeriesCurrentLevel } from "@/domain/achievements/achievement.types";
+import type { AchievementCategory } from "@/domain/progress/progressEvent.types";
+import { CATEGORY_LABELS } from "@/domain/progress/progressEvent.types";
+import { Progress, cn } from "@/shared/components/ui";
 
-const FILTER_CATEGORIES: AchievementCategory[] = [
-  "all",
-  "combat",
-  "strength",
-  "endurance",
-  "finance",
-  "challenges",
-  "constancy",
-  "conditions",
+// "conditions" is the real category from the existing types, not "special"
+const CATEGORIES: AchievementCategory[] = [
+  "all", "combat", "strength", "endurance", "finance", "challenges", "constancy", "conditions",
 ];
-
 const CATEGORY_ICONS: Record<AchievementCategory, string> = {
   all: "🎮",
   combat: "🥊",
@@ -34,127 +20,122 @@ const CATEGORY_ICONS: Record<AchievementCategory, string> = {
   finance: "💰",
   challenges: "⚔️",
   constancy: "📅",
-  conditions: "🌦️",
+  conditions: "🌡️",
 };
 
 export function AchievementsPage() {
   const [filter, setFilter] = useState<AchievementCategory>("all");
   const navigate = useNavigate();
-  const activeUserId = useAppStore((state) => state.activeUserId);
-  const allProgress = useAppStore((state) => state.getUserAchievementProgress(activeUserId));
+  const activeUserId = useAppStore((s) => s.activeUserId);
+  const getUserAchievementProgress = useAppStore((s) => s.getUserAchievementProgress);
+  const allProgress = getUserAchievementProgress(activeUserId);
 
-  const filtered = ACHIEVEMENT_CATALOG.filter(
-    (series) => filter === "all" || series.category === filter
-  );
-  const unlockedSeries = allProgress.filter((progress) => progress.currentLevel > 0).length;
-  const maxedSeries = allProgress.filter((progress) => {
-    const series = ACHIEVEMENT_CATALOG.find((item) => item.id === progress.seriesId);
-    return Boolean(series && progress.currentLevel >= series.levels.length);
+  const filtered = ACHIEVEMENT_CATALOG.filter((s) => filter === "all" || s.category === filter);
+  const totalUnlocked = allProgress.filter((p) => p.currentLevel > 0).length;
+  const totalMaxed = allProgress.filter((p) => {
+    const s = ACHIEVEMENT_CATALOG.find((x) => x.id === p.seriesId);
+    return s && p.currentLevel >= s.levels.length;
   }).length;
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-6 animate-fade-in">
-        <div className="mb-6">
-          <p className="mb-1 text-xs uppercase tracking-widest text-text-muted">Coleccion</p>
-          <h1 className="font-display text-4xl tracking-wide text-text-primary">Logros</h1>
-          <div className="mt-2 flex items-center gap-4">
-            <span className="text-sm text-text-secondary">
-              <span className="font-mono text-accent-cyan">{unlockedSeries}</span>/{ACHIEVEMENT_CATALOG.length} series
-            </span>
-            <span className="text-sm text-text-secondary">
-              <span className="font-mono text-accent-amber">{maxedSeries}</span> completadas
-            </span>
-          </div>
+      <div className="max-w-3xl mx-auto px-6 py-6 animate-fade-in">
+        {/* Header */}
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Logros</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">
+            {totalUnlocked}/{ACHIEVEMENT_CATALOG.length} series iniciadas
+            {totalMaxed > 0 && ` · ${totalMaxed} completadas`}
+          </p>
         </div>
 
-        <div className="mb-6 flex flex-wrap gap-1">
-          {FILTER_CATEGORIES.map((category) => (
+        {/* Category filter */}
+        <div className="flex gap-1.5 flex-wrap mb-5">
+          {CATEGORIES.map((cat) => (
             <button
-              key={category}
-              onClick={() => setFilter(category)}
+              key={cat}
+              onClick={() => setFilter(cat)}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                filter === category
-                  ? "bg-accent-cyan text-bg-base"
-                  : "border border-bg-border bg-bg-card text-text-secondary hover:text-text-primary"
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition-all duration-150",
+                filter === cat
+                  ? "bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm"
+                  : "bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--bg-border)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
               )}
             >
-              <span>{CATEGORY_ICONS[category]}</span>
-              <span>{CATEGORY_LABELS[category]}</span>
+              {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {/* Achievement grid */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {filtered.map((series) => {
-            const progress = allProgress.find((item) => item.seriesId === series.id);
-            const currentLevelNumber = progress?.currentLevel ?? 0;
-            const currentLevel = getSeriesCurrentLevel(series, progress);
-            const nextLevel = getSeriesNextLevel(series, progress);
-            const progressPercent = getSeriesProgressPercent(series, progress);
-            const isMaxed = !nextLevel;
-            const rarityColor = RARITY_COLORS[nextLevel?.rarity ?? currentLevel?.rarity ?? series.rarity];
+            const prog = allProgress.find((p) => p.seriesId === series.id);
+            const currentLevel = prog?.currentLevel ?? 0;
+            const maxLevel = series.levels.length;
+            const isMaxed = currentLevel >= maxLevel;
+            const pct = getSeriesProgressPercent(series, prog);
+            const nextLevel = getSeriesNextLevel(series, prog);
+            const currentLevelDef = getSeriesCurrentLevel(series, prog);
+            const unlocked = currentLevel > 0;
+            const accentColor = nextLevel
+              ? RARITY_COLORS[nextLevel.rarity]
+              : RARITY_COLORS.legendary;
 
             return (
-              <Card
+              <button
                 key={series.id}
-                className="cursor-pointer hover:border-accent-cyan/50"
                 onClick={() => navigate(`/achievements/${series.id}`)}
-                style={currentLevelNumber > 0 ? { borderColor: `${rarityColor}55` } : {}}
+                className={cn(
+                  "rounded-xl border p-3 text-left bg-[var(--bg-surface)] shadow-card",
+                  "transition-all duration-150 hover:shadow-card-md hover:-translate-y-0.5",
+                  isMaxed ? "border-[var(--gold)]" : "border-[var(--bg-border)]"
+                )}
+                style={isMaxed ? { boxShadow: `0 0 0 1px var(--gold), 0 4px 12px 0 rgb(0 0 0 / 0.08)` } : {}}
               >
-                <CardContent>
-                  <div className="mb-3 flex items-start gap-3">
+                {/* Icon */}
+                <div className="text-3xl mb-2 text-center">
+                  {isMaxed ? "🏆" : unlocked ? series.icon : "🔒"}
+                </div>
+
+                {/* Level pips */}
+                <div className="flex gap-0.5 mb-2">
+                  {series.levels.map((l) => (
                     <div
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-2xl"
-                      style={{ background: `${rarityColor}18` }}
-                    >
-                      {series.icon}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-text-primary">{series.name}</p>
-                      <p className="text-xs text-text-muted">{CATEGORY_LABELS[series.category]}</p>
-                    </div>
-                    <Badge variant={series.status === "active" ? "emerald" : "muted"}>
-                      {series.status}
-                    </Badge>
-                  </div>
+                      key={l.level}
+                      className="h-1 flex-1 rounded-full"
+                      style={{
+                        background: currentLevel >= l.level
+                          ? RARITY_COLORS[l.rarity]
+                          : "var(--bg-elevated)",
+                      }}
+                    />
+                  ))}
+                </div>
 
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-xs text-text-secondary">
-                      Nivel {currentLevelNumber}/{series.levels.length}
-                    </span>
-                    <span className="text-xs" style={{ color: rarityColor }}>
-                      {currentLevel?.label ?? "Sin desbloquear"}
-                    </span>
-                  </div>
+                {/* Name */}
+                <p className="text-xs font-semibold text-[var(--text-primary)] leading-tight mb-0.5 text-center">
+                  {series.name}
+                </p>
 
-                  {!isMaxed && nextLevel ? (
-                    <>
-                      <div className="mb-1 flex justify-between text-[10px] text-text-muted">
-                        <span>{progress?.currentValue ?? 0} / {nextLevel.threshold}</span>
-                        <span>{Math.round(progressPercent)}%</span>
-                      </div>
-                      <Progress value={progressPercent} color={rarityColor} />
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Badge variant="muted">{nextLevel.label}</Badge>
-                        <Badge style={{ background: `${rarityColor}18`, color: rarityColor }}>
-                          {RARITY_LABELS[nextLevel.rarity]}
-                        </Badge>
-                        <Badge variant="amber">+{nextLevel.xpReward} XP</Badge>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rounded-lg border border-accent-amber/30 bg-accent-amber/10 px-3 py-2 text-sm text-accent-amber">
-                      Trofeo completado
-                    </div>
-                  )}
-
-                  <p className="mt-3 text-[10px] text-text-muted">
-                    Metrica: {series.dependsOnMetric}
+                {/* Status */}
+                {unlocked && !isMaxed ? (
+                  <p className="text-[10px] text-center font-medium" style={{ color: accentColor }}>
+                    {currentLevelDef?.label}
                   </p>
-                </CardContent>
-              </Card>
+                ) : isMaxed ? (
+                  <p className="text-[10px] text-center font-medium text-[var(--gold)]">Completado 🏆</p>
+                ) : (
+                  <p className="text-[10px] text-center text-[var(--text-muted)]">Sin empezar</p>
+                )}
+
+                {/* Progress bar */}
+                {!isMaxed && (
+                  <div className="mt-2">
+                    <Progress value={pct} color={accentColor} thin />
+                  </div>
+                )}
+              </button>
             );
           })}
         </div>

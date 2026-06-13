@@ -1,4 +1,0 @@
-export {
-  ACHIEVEMENT_SERIES_CATALOG as ACHIEVEMENT_CATALOG,
-  ACHIEVEMENT_SERIES_BY_ID as ACHIEVEMENT_BY_ID,
-} from "./achievementSeriesCatalog";

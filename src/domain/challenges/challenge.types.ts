@@ -1,75 +1,69 @@
-import { z } from "zod";
-import type { UserId } from "../users/user.types";
+import type { UserId } from "@/domain/users/user.types";
 
-export const ChallengeStatusEnum = z.enum([
-  "proposed",
-  "accepted",
-  "completed",
-  "failed",
-]);
-export type ChallengeStatus = z.infer<typeof ChallengeStatusEnum>;
+export type ChallengeStatus =
+  | "draft"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "active"
+  | "completed"
+  | "failed"
+  | "expired"
+  | "cancelled";
 
-export const ChallengeTypeEnum = z.enum([
-  "workout_count",
-  "workout_duration",
-  "distance",
-  "weight_lifted",
-  "saving_amount",
-  "streak",
-  "custom",
-]);
-export type ChallengeType = z.infer<typeof ChallengeTypeEnum>;
+export type ChallengeType = "direct" | "versus";
 
-export const ChallengeSchema = z.object({
-  id: z.string(),
-  createdBy: z.string() as z.ZodType<UserId>,
-  targetUser: z.string() as z.ZodType<UserId>,
-  title: z.string().min(3).max(100),
-  type: ChallengeTypeEnum,
-  targetValue: z.number().min(0),
-  unit: z.string(),
-  points: z.number().min(1).max(500),
-  startDate: z.string(),
-  endDate: z.string(),
-  status: ChallengeStatusEnum,
-  currentValue: z.number().default(0),
-  notes: z.string().optional(),
-  createdAt: z.string(),
-  deletedAt: z.string().nullable().optional(),
-});
+export interface Challenge {
+  id: string;
+  type: ChallengeType;
+  title: string;
+  description: string;
+  createdByUserId: UserId;
+  assignedToUserId?: UserId;
+  status: ChallengeStatus;
+  /** MetricDefinition id used to track progress (optional for direct challenges) */
+  metricId?: string;
+  targetValue?: number;
+  startsAt: string;
+  endsAt: string;
+  rewardXp: number;
+  createdAt: string;
+  acceptedAt?: string;
+  completedAt?: string;
+}
 
-export type Challenge = z.infer<typeof ChallengeSchema>;
+export interface CreateChallengeInput {
+  type: ChallengeType;
+  title: string;
+  description: string;
+  createdByUserId: UserId;
+  assignedToUserId?: UserId;
+  metricId?: string;
+  targetValue?: number;
+  endsAt: string;
+  rewardXp: number;
+}
 
-export const CreateChallengeSchema = ChallengeSchema.omit({
-  id: true,
-  createdAt: true,
-  deletedAt: true,
-  status: true,
-  currentValue: true,
-});
-
-export type CreateChallengeInput = z.infer<typeof CreateChallengeSchema>;
-
-export const CHALLENGE_TYPE_LABELS: Record<ChallengeType, string> = {
-  workout_count: "Nº Entrenamientos",
-  workout_duration: "Minutos entrenados",
-  distance: "Distancia (km)",
-  weight_lifted: "Peso levantado (kg)",
-  saving_amount: "Ahorro (€)",
-  streak: "Racha (días)",
-  custom: "Personalizado",
-};
-
-export const STATUS_LABELS: Record<ChallengeStatus, string> = {
-  proposed: "Propuesto",
+export const CHALLENGE_STATUS_LABELS: Record<ChallengeStatus, string> = {
+  draft: "Borrador",
+  sent: "Enviado",
   accepted: "Aceptado",
+  rejected: "Rechazado",
+  active: "Activo",
   completed: "Completado",
   failed: "Fallido",
+  expired: "Caducado",
+  cancelled: "Cancelado",
 };
 
-export const STATUS_COLORS: Record<ChallengeStatus, string> = {
-  proposed: "#f59e0b",
+export const CHALLENGE_STATUS_COLORS: Record<ChallengeStatus, string> = {
+  draft: "#8888aa",
+  sent: "#f59e0b",
   accepted: "#00e5ff",
-  completed: "#10b981",
+  rejected: "#f43f5e",
+  active: "#10b981",
+  completed: "#f59e0b",
   failed: "#f43f5e",
+  expired: "#444466",
+  cancelled: "#444466",
 };

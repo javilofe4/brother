@@ -1,25 +1,21 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  LayoutDashboard,
-  Trophy,
-  PlusCircle,
-  Swords,
-  User,
-} from "lucide-react";
+import { Home, PlusCircle, Trophy, Swords } from "lucide-react";
 
 export interface NavItem {
   to: string;
   icon: LucideIcon;
   label: string;
-  accent?: string;
+  exact?: boolean;
 }
 
+// Primary nav: 4 items max
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/achievements", icon: Trophy, label: "Logros" },
-  { to: "/register", icon: PlusCircle, label: "Registrar", accent: "#00e5ff" },
-  { to: "/duel", icon: Swords, label: "Duelo" },
-  { to: "/profile", icon: User, label: "Perfil" },
+  { to: "/",            icon: Home,       label: "Inicio",     exact: true },
+  { to: "/register",   icon: PlusCircle, label: "Registrar" },
+  { to: "/achievements",icon: Trophy,    label: "Logros" },
+  { to: "/challenges",  icon: Swords,    label: "Retos" },
 ];
 
+// Secondary (header avatar menu)
+export const PROFILE_ROUTE  = "/profile";
 export const SETTINGS_ROUTE = "/settings";

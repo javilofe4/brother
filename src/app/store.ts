@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { v4 as uuid } from "uuid";
 import type { UserId } from "@/domain/users/user.types";
 import { normalizeUserId } from "@/domain/users/user.types";
 import type { Session, CreateSessionInput } from "@/domain/sessions/session.types";
@@ -8,6 +9,7 @@ import type { MetricSnapshot } from "@/domain/metrics/metric.types";
 import type { AchievementProgress } from "@/domain/achievements/achievement.types";
 import type { XpLedgerEntry } from "@/domain/xp/xpLedger.types";
 import type { GamePipelineResult } from "@/domain/game/gamePipeline.service";
+import type { Challenge, CreateChallengeInput, ChallengeStatus } from "@/domain/challenges/challenge.types";
 import { registerSessionThroughPipeline } from "@/domain/game/gamePipeline.service";
 import { rebuildMetricSnapshotsForUsers } from "@/domain/metrics/metricSnapshot.service";
 import { rebuildAchievementProgressForUsers } from "@/domain/achievements/achievementProgress.service";
@@ -32,6 +34,13 @@ interface AppState {
   xpLedger: XpLedgerEntry[];
   lastPipelineResult?: GamePipelineResult;
 
+  // Challenges
+  challenges: Challenge[];
+  createChallenge: (input: CreateChallengeInput) => Challenge;
+  respondToChallenge: (id: string, accept: boolean) => void;
+  completeChallenge: (id: string, userId: UserId) => void;
+  cancelChallenge: (id: string) => void;
+
   registerSession: (input: Omit<CreateSessionInput, "userId"> & { userId?: UserId }) => GamePipelineResult;
   getUserTotalXp: (userId: UserId) => number;
   getUserAchievementProgress: (userId: UserId) => AchievementProgress[];
@@ -54,7 +63,7 @@ function buildAchievementLedger(progress: AchievementProgress[]): XpLedgerEntry[
         source: "achievement_unlock" as const,
         referenceId: `${series.id}:${level.level}:${unlock.eventId}`,
         occurredAt: unlock.unlockedAt,
-        description: `${series.name} ${level.label}`,
+        description: `${series.name} — ${level.label}`,
       }];
     });
   });
@@ -146,15 +155,82 @@ export const useAppStore = create<AppState>()(
       metricSnapshots: initialDerived.metricSnapshots,
       achievementProgress: initialDerived.achievementProgress,
       xpLedger: initialDerived.xpLedger,
+      challenges: [],
+
+      // ── Challenge actions ──────────────────────────────────────
+
+      createChallenge: (input) => {
+        const now = new Date().toISOString();
+        const challenge: Challenge = {
+          id: uuid(),
+          type: input.type,
+          title: input.title,
+          description: input.description,
+          createdByUserId: input.createdByUserId,
+          assignedToUserId: input.assignedToUserId,
+          status: input.assignedToUserId ? "sent" : "draft",
+          metricId: input.metricId,
+          targetValue: input.targetValue,
+          startsAt: now,
+          endsAt: input.endsAt,
+          rewardXp: input.rewardXp,
+          createdAt: now,
+        };
+        set((s) => ({ challenges: [challenge, ...s.challenges] }));
+        return challenge;
+      },
+
+      respondToChallenge: (id, accept) => {
+        set((s) => ({
+          challenges: s.challenges.map((c) =>
+            c.id !== id
+              ? c
+              : {
+                  ...c,
+                  status: (accept ? "active" : "rejected") as ChallengeStatus,
+                  acceptedAt: accept ? new Date().toISOString() : undefined,
+                }
+          ),
+        }));
+      },
+
+      completeChallenge: (id, userId) => {
+        const state = get();
+        const challenge = state.challenges.find((c) => c.id === id);
+        if (!challenge) return;
+        const now = new Date().toISOString();
+        const xpEntry: XpLedgerEntry = {
+          id: uuid(),
+          userId,
+          amount: challenge.rewardXp,
+          source: "challenge_completed",
+          referenceId: id,
+          occurredAt: now,
+          description: `Reto completado: ${challenge.title}`,
+        };
+        set((s) => ({
+          challenges: s.challenges.map((c) =>
+            c.id === id ? { ...c, status: "completed" as ChallengeStatus, completedAt: now } : c
+          ),
+          xpLedger: [xpEntry, ...s.xpLedger],
+        }));
+      },
+
+      cancelChallenge: (id) => {
+        set((s) => ({
+          challenges: s.challenges.map((c) =>
+            c.id === id ? { ...c, status: "cancelled" as ChallengeStatus } : c
+          ),
+        }));
+      },
+
+      // ── Session registration ──────────────────────────────────
 
       registerSession: (input) => {
         const state = get();
         const result = registerSessionThroughPipeline(
           state,
-          {
-            ...input,
-            userId: input.userId ?? state.activeUserId,
-          }
+          { ...input, userId: input.userId ?? state.activeUserId }
         );
         set({
           sessions: [result.session, ...state.sessions],
@@ -167,23 +243,24 @@ export const useAppStore = create<AppState>()(
         return result;
       },
 
+      // ── Selectors ─────────────────────────────────────────────
+
       getUserTotalXp: (userId) => sumUserXp(get().xpLedger, userId),
 
-      getUserAchievementProgress: (userId) => {
-        return get().achievementProgress.filter((progress) => progress.userId === userId);
-      },
+      getUserAchievementProgress: (userId) =>
+        get().achievementProgress.filter((p) => p.userId === userId),
 
-      getUserEvents: (userId) => {
-        return get()
+      getUserEvents: (userId) =>
+        get()
           .progressEvents
-          .filter((event) => event.userId === userId)
-          .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-      },
+          .filter((e) => e.userId === userId)
+          .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
 
-      getUserMetricValue: (userId, metricId) => getMetricValue(get().metricSnapshots, userId, metricId),
+      getUserMetricValue: (userId, metricId) =>
+        getMetricValue(get().metricSnapshots, userId, metricId),
 
       getStreak: (userId) => {
-        const events = get().progressEvents.filter((event) => event.userId === userId);
+        const events = get().progressEvents.filter((e) => e.userId === userId);
         return computeCurrentStreakDays(events);
       },
     }),
@@ -194,22 +271,24 @@ export const useAppStore = create<AppState>()(
         sessions: state.sessions,
         progressEvents: state.progressEvents,
         xpLedger: state.xpLedger,
+        challenges: state.challenges,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const normalizedEvents = (state.progressEvents ?? [])
           .map(normalizeEvent)
-          .filter((event): event is ProgressEvent => Boolean(event));
+          .filter((e): e is ProgressEvent => Boolean(e));
         const events = normalizedEvents.length > 0 ? normalizedEvents : mockProgressEvents;
         const derived = buildDerivedState(events);
         state.activeUserId = normalizeUserId(state.activeUserId);
         state.sessions = (state.sessions ?? [])
           .map(normalizeSession)
-          .filter((session): session is Session => Boolean(session));
+          .filter((s): s is Session => Boolean(s));
         state.progressEvents = events;
         state.metricSnapshots = derived.metricSnapshots;
         state.achievementProgress = derived.achievementProgress;
         state.xpLedger = derived.xpLedger;
+        state.challenges = (state.challenges ?? []) as Challenge[];
       },
     }
   )

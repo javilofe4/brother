@@ -15,6 +15,7 @@ const allSessionTypes = [
 ] as const;
 
 export const METRIC_DEFINITIONS: MetricDefinition[] = [
+  // ── All-time activity metrics ─────────────────────────────────
   { id: "combat_sessions_total", label: "Combate total", aggregate: "count", filter: { eventTypes: ["combat_session"], window: "all_time" } },
   { id: "outdoor_sessions_total", label: "Sesiones al aire libre", aggregate: "count", filter: { tags: ["outdoor"], window: "all_time" } },
   { id: "extreme_heat_sessions_total", label: "Calor extremo", aggregate: "count", filter: { tags: ["extreme_heat"], window: "all_time" } },
@@ -37,6 +38,19 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "all_sessions_total", label: "Todas las sesiones", aggregate: "count", filter: { eventTypes: [...allSessionTypes], window: "all_time" } },
   { id: "current_week_sessions_total", label: "Sesiones esta semana", aggregate: "count", filter: { eventTypes: [...allSessionTypes], window: "current_week" } },
   { id: "distinct_active_days_total", label: "Dias activos", aggregate: "distinct_days", filter: { eventTypes: [...allSessionTypes], window: "all_time" } },
+
+  // ── Monthly mission metrics ───────────────────────────────────
+  { id: "current_month_combat_sessions", label: "Combate este mes", aggregate: "count", filter: { eventTypes: ["combat_session"], window: "current_month" } },
+  { id: "current_month_strength_sessions", label: "Fuerza este mes", aggregate: "count", filter: { eventTypes: ["strength_session"], window: "current_month" } },
+  {
+    id: "current_month_endurance_sessions",
+    label: "Resistencia este mes",
+    aggregate: "count",
+    filter: { eventTypes: ["swimming_session", "running_session", "walking_session", "route_session"], window: "current_month" },
+  },
+  { id: "current_month_active_days", label: "Dias activos este mes", aggregate: "distinct_days", filter: { eventTypes: [...allSessionTypes], window: "current_month" } },
+  { id: "current_month_total_sessions", label: "Sesiones totales este mes", aggregate: "count", filter: { eventTypes: [...allSessionTypes], window: "current_month" } },
+  { id: "current_month_completed_challenges", label: "Retos completados este mes", aggregate: "count", filter: { eventTypes: ["challenge_result"], window: "current_month" } },
 ];
 
 export const METRIC_BY_ID = Object.fromEntries(
